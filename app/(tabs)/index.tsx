@@ -11,9 +11,12 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { Stack } from "expo-router";
 import { useRouter } from "expo-router"; // Import this
+import { useAuth } from "@/context/AuthContext";
 
 export default function HomeScreen() {
-  const router = useRouter(); // Initialize router
+  const router = useRouter();
+  const { user } = useAuth();
+
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -26,7 +29,7 @@ export default function HomeScreen() {
           </View>
           <View>
             <Text style={styles.welcomeSub}>WELCOME BACK</Text>
-            <Text style={styles.welcomeTitle}>Yousuf!</Text>
+            <Text style={styles.welcomeTitle}>{user?.name || "User"}!</Text>
           </View>
         </View>
 
