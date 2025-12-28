@@ -72,7 +72,7 @@ export default function HomeScreen() {
         {/* Topics Header */}
         <View style={styles.sectionHeader}>
           <View style={{ flex: 1 }} />
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push("/learn")}>
             <Text style={styles.viewAllText}>View All</Text>
           </TouchableOpacity>
         </View>
