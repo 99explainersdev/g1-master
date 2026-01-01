@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -6,21 +6,101 @@ import {
   TouchableOpacity,
   ScrollView,
   SafeAreaView,
+  Image,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { mockQuestions } from "@/constants/questions";
+import { useLocalSearchParams, useRouter } from "expo-router";
+
+const API_URL = "https://g1-master-admin.vercel.app";
+
+interface Question {
+  id: string;
+  question: string;
+  options: string[];
+  correctAnswerIndex: number;
+  explanation: string;
+  category: string;
+  imageUrl?: string;
+}
 
 export default function QuizScreen() {
-  const [screenState, setScreenState] = useState<"intro" | "quiz" | "result">(
-    "intro"
-  );
+  const params = useLocalSearchParams();
+  const router = useRouter();
+  const quizType = params.type as string || "quick"; // quick, traffic_signs, rules_of_road
+
+  const [screenState, setScreenState] = useState<"loading" | "intro" | "quiz" | "result">("loading");
+  const [questions, setQuestions] = useState<Question[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [score, setScore] = useState(0);
 
-  const currentQuestion = mockQuestions[currentQuestionIndex];
-  const totalQuestions = mockQuestions.length;
+  const currentQuestion = questions[currentQuestionIndex];
+  const totalQuestions = questions.length;
+
+  // Fetch questions based on quiz type
+  useEffect(() => {
+    fetchQuestions();
+  }, [quizType]);
+
+  const fetchQuestions = async () => {
+    try {
+      setScreenState("loading");
+      
+      let apiUrl = `${API_URL}/api/quiz`;
+      
+      if (quizType === "quick") {
+        apiUrl += "?random=true&limit=20";
+      } else if (quizType === "traffic_signs") {
+        apiUrl += "?category=traffic_signs";
+      } else if (quizType === "rules_of_road") {
+        apiUrl += "?category=rules_of_road";
+      }
+
+      const response = await fetch(apiUrl);
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        if (data.quizzes.length === 0) {
+          Alert.alert("No Questions", "No questions available for this quiz type.");
+          router.back();
+          return;
+        }
+        setQuestions(data.quizzes);
+        setScreenState("intro");
+      } else {
+        throw new Error("Failed to load questions");
+      }
+    } catch (error) {
+      console.error("Error fetching questions:", error);
+      Alert.alert("Error", "Could not load quiz questions. Please try again.");
+      router.back();
+    }
+  };
+
+  const getQuizTitle = () => {
+    switch (quizType) {
+      case "traffic_signs":
+        return "Traffic Signs Quiz";
+      case "rules_of_road":
+        return "Rules of the Road Quiz";
+      default:
+        return "Quick Quiz";
+    }
+  };
+
+  const getQuizDescription = () => {
+    switch (quizType) {
+      case "traffic_signs":
+        return `${totalQuestions} questions about road signs`;
+      case "rules_of_road":
+        return `${totalQuestions} questions about traffic laws`;
+      default:
+        return `${totalQuestions} mixed questions from all categories`;
+    }
+  };
 
   const handleStartQuiz = () => {
     setScreenState("quiz");
@@ -37,8 +117,6 @@ export default function QuizScreen() {
   };
 
   const handleSubmit = () => {
-    // FIX: Explicitly check for null.
-    // If we just check !selectedOption, 0 (the first choice) fails.
     if (selectedOption === null) return;
 
     setIsSubmitted(true);
@@ -59,21 +137,38 @@ export default function QuizScreen() {
   };
 
   const handleRestart = () => {
-    setScreenState("intro");
+    router.back();
   };
+
+  // --- LOADING SCREEN ---
+  if (screenState === "loading") {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#2563EB" />
+          <Text style={styles.loadingText}>Loading quiz...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   // --- 1. INTRO SCREEN ---
   if (screenState === "intro") {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.introContent}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={24} color="#111827" />
+          </TouchableOpacity>
+
           <View style={styles.introIconCircle}>
             <Ionicons name="play" size={40} color="#4F46E5" />
           </View>
           <Text style={styles.introTitle}>Ready?</Text>
-          <Text style={styles.introSubtitle}>
-            {totalQuestions} questions selected randomly from all categories.
-          </Text>
+          <Text style={styles.introSubtitle}>{getQuizDescription()}</Text>
           <TouchableOpacity style={styles.primaryBtn} onPress={handleStartQuiz}>
             <Text style={styles.primaryBtnText}>Start Quiz</Text>
           </TouchableOpacity>
@@ -87,6 +182,7 @@ export default function QuizScreen() {
     const passingScore = Math.ceil(totalQuestions * 0.8);
     const isPassed = score >= passingScore;
     const incorrect = totalQuestions - score;
+    const percentage = Math.round((score / totalQuestions) * 100);
 
     return (
       <SafeAreaView style={styles.container}>
@@ -110,9 +206,7 @@ export default function QuizScreen() {
             {isPassed ? "Good Job!" : "Keep Practicing"}
           </Text>
           <Text style={styles.resultSubtitle}>
-            {isPassed
-              ? "You passed the practice test."
-              : "You did not pass the test this time."}
+            You scored {percentage}%. {isPassed ? "You passed!" : "You need 80% to pass."}
           </Text>
 
           <View style={styles.statsContainer}>
@@ -133,32 +227,48 @@ export default function QuizScreen() {
   }
 
   // --- 3. QUIZ SCREEN ---
+  if (!currentQuestion) return null;
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Ionicons name="close" size={24} color="#111827" />
+          </TouchableOpacity>
           <Text style={styles.headerTitle}>
-            Questions {currentQuestionIndex + 1}/{totalQuestions}
+            {currentQuestionIndex + 1}/{totalQuestions}
           </Text>
-          <View style={styles.progressBarBg}>
-            <View
-              style={[
-                styles.progressBarFill,
-                {
-                  width: `${
-                    ((currentQuestionIndex + 1) / totalQuestions) * 100
-                  }%`,
-                },
-              ]}
-            />
-          </View>
+          <View style={{ width: 24 }} />
+        </View>
+
+        <View style={styles.progressBarBg}>
+          <View
+            style={[
+              styles.progressBarFill,
+              {
+                width: `${((currentQuestionIndex + 1) / totalQuestions) * 100}%`,
+              },
+            ]}
+          />
         </View>
 
         <Text style={styles.questionText}>{currentQuestion.question}</Text>
 
-        <View style={styles.imagePlaceholder}>
-          <Ionicons name="image-outline" size={60} color="#9CA3AF" />
-        </View>
+        {/* Image (if available) */}
+        {currentQuestion.imageUrl ? (
+          <View style={styles.imageContainer}>
+            <Image
+              source={{ uri: currentQuestion.imageUrl }}
+              style={styles.questionImage}
+              resizeMode="contain"
+            />
+          </View>
+        ) : (
+          <View style={styles.imagePlaceholder}>
+            <Ionicons name="image-outline" size={60} color="#9CA3AF" />
+          </View>
+        )}
 
         <View style={styles.optionsContainer}>
           {currentQuestion.options.map((option, index) => {
@@ -221,18 +331,15 @@ export default function QuizScreen() {
           </View>
         )}
 
-        {/* --- FIXED SUBMIT BUTTON --- */}
         <TouchableOpacity
           style={[
             styles.primaryBtn,
             {
               marginTop: 24,
-              // FIX: Use explicit null check. index 0 is valid!
               backgroundColor: selectedOption === null ? "#9CA3AF" : "#2563EB",
             },
           ]}
           onPress={isSubmitted ? handleNext : handleSubmit}
-          // FIX: Use explicit null check
           disabled={selectedOption === null}
         >
           <Text style={styles.primaryBtnText}>
@@ -253,6 +360,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F9FAFB",
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: "#6B7280",
+  },
   scrollContent: {
     padding: 20,
     paddingBottom: 40,
@@ -262,6 +379,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     padding: 24,
+  },
+  backButton: {
+    position: "absolute",
+    top: 60,
+    left: 20,
   },
   introIconCircle: {
     width: 100,
@@ -284,20 +406,24 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 32,
   },
-
-  header: { marginBottom: 24, marginTop: 10 },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+    marginTop: 10,
+  },
   headerTitle: {
     fontSize: 18,
     fontWeight: "bold",
     color: "#111827",
-    marginBottom: 12,
-    textAlign: "center",
   },
   progressBarBg: {
     height: 6,
     backgroundColor: "#E5E7EB",
     borderRadius: 3,
     width: "100%",
+    marginBottom: 24,
   },
   progressBarFill: {
     height: "100%",
@@ -309,6 +435,21 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#111827",
     marginBottom: 20,
+    lineHeight: 26,
+  },
+  imageContainer: {
+    width: "100%",
+    height: 200,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 24,
+    overflow: "hidden",
+  },
+  questionImage: {
+    width: "100%",
+    height: "100%",
   },
   imagePlaceholder: {
     width: "100%",
@@ -340,7 +481,6 @@ const styles = StyleSheet.create({
   },
   explanationLabel: { fontWeight: "bold", color: "#1E40AF", marginBottom: 4 },
   explanationText: { color: "#1E3A8A", fontSize: 14, lineHeight: 20 },
-
   resultContent: { alignItems: "center", padding: 24, paddingTop: 60 },
   scoreCircle: {
     width: 160,
@@ -384,7 +524,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   statTextRed: { color: "#EF4444", fontWeight: "bold", fontSize: 16 },
-
   primaryBtn: {
     backgroundColor: "#2563EB",
     width: "100%",
