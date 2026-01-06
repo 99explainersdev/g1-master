@@ -41,8 +41,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       const storedUser = await AsyncStorage.getItem("userData");
 
       if (storedToken && storedUser) {
+        const parsedUser = JSON.parse(storedUser);
         setToken(storedToken);
-        setUser(JSON.parse(storedUser));
+        setUser(parsedUser);
+        
+        // Ensure userEmail is set for quiz attempts
+        await AsyncStorage.setItem("userEmail", parsedUser.email);
       }
     } catch (error) {
       console.error("Error checking auth:", error);
@@ -52,17 +56,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const login = async (authToken: string, userData: User) => {
-    await AsyncStorage.setItem("authToken", authToken);
-    await AsyncStorage.setItem("userData", JSON.stringify(userData));
-    setToken(authToken);
-    setUser(userData);
+    try {
+      // Save auth data
+      await AsyncStorage.setItem("authToken", authToken);
+      await AsyncStorage.setItem("userData", JSON.stringify(userData));
+      
+      // Clear any old guest email and save the authenticated user's email
+      await AsyncStorage.removeItem("userEmail");
+      await AsyncStorage.setItem("userEmail", userData.email);
+      
+      setToken(authToken);
+      setUser(userData);
+      
+      console.log("✅ User logged in successfully:", userData.email);
+    } catch (error) {
+      console.error("Error during login:", error);
+      throw error;
+    }
   };
 
   const logout = async () => {
-    await AsyncStorage.removeItem("authToken");
-    await AsyncStorage.removeItem("userData");
-    setToken(null);
-    setUser(null);
+    try {
+      // Clear all user data including email
+      await AsyncStorage.removeItem("authToken");
+      await AsyncStorage.removeItem("userData");
+      await AsyncStorage.removeItem("userEmail");
+      
+      setToken(null);
+      setUser(null);
+      
+      console.log("✅ User logged out successfully");
+    } catch (error) {
+      console.error("Error during logout:", error);
+    }
   };
 
   return (

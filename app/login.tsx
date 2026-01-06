@@ -14,6 +14,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/context/AuthContext";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const API_URL = "https://g1-master-admin.vercel.app";
 
@@ -51,6 +52,14 @@ export default function LoginScreen() {
       if (!response.ok) {
         throw new Error(data.error || "Login failed");
       }
+
+      // Clear any old guest email before setting the real user email
+      await AsyncStorage.removeItem("userEmail");
+      
+      // Set the authenticated user's email
+      await AsyncStorage.setItem("userEmail", data.user.email);
+      
+      console.log("✅ User email saved:", data.user.email);
 
       // Use AuthContext login function
       await login(data.token, data.user);

@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const API_URL = "https://g1-master-admin.vercel.app";
 
@@ -25,25 +26,61 @@ interface Question {
   imageUrl?: string;
 }
 
+interface QuestionAttempt {
+  questionId: string;
+  userAnswer: number;
+  correctAnswer: number;
+  isCorrect: boolean;
+}
+
 export default function QuizScreen() {
   const params = useLocalSearchParams();
   const router = useRouter();
-  const quizType = params.type as string || "quick"; // quick, traffic_signs, rules_of_road
+  const quizType = params.type as string || "quick";
 
-  const [screenState, setScreenState] = useState<"loading" | "intro" | "quiz" | "result">("loading");
+  const [screenState, setScreenState] = useState<"loading" | "intro" | "quiz" | "result" | "saving">("loading");
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [score, setScore] = useState(0);
+  const [questionsAttempted, setQuestionsAttempted] = useState<QuestionAttempt[]>([]);
+  const [startTime, setStartTime] = useState<number>(0);
+  const [userEmail, setUserEmail] = useState<string>("");
 
   const currentQuestion = questions[currentQuestionIndex];
   const totalQuestions = questions.length;
 
+  // Get user email from authenticated session
+  useEffect(() => {
+    getUserEmail();
+  }, []);
+
+  const getUserEmail = async () => {
+    try {
+      const email = await AsyncStorage.getItem("userEmail");
+      
+      if (!email) {
+        // User is not logged in - redirect to login screen
+        console.log("No user email found - redirecting to login");
+        router.replace("/login"); // Update this path to match your login route
+        return;
+      }
+      
+      setUserEmail(email);
+    } catch (error) {
+      console.error("Error getting user email:", error);
+      // If there's an error reading the email, redirect to login
+      router.replace("/login");
+    }
+  };
+
   // Fetch questions based on quiz type
   useEffect(() => {
-    fetchQuestions();
-  }, [quizType]);
+    if (userEmail) {
+      fetchQuestions();
+    }
+  }, [quizType, userEmail]);
 
   const fetchQuestions = async () => {
     try {
@@ -108,6 +145,8 @@ export default function QuizScreen() {
     setScore(0);
     setIsSubmitted(false);
     setSelectedOption(null);
+    setQuestionsAttempted([]);
+    setStartTime(Date.now());
   };
 
   const handleOptionSelect = (index: number) => {
@@ -119,9 +158,20 @@ export default function QuizScreen() {
   const handleSubmit = () => {
     if (selectedOption === null) return;
 
+    const isCorrect = selectedOption === currentQuestion.correctAnswerIndex;
+    
+    // Record this attempt
+    const attempt: QuestionAttempt = {
+      questionId: currentQuestion.id,
+      userAnswer: selectedOption,
+      correctAnswer: currentQuestion.correctAnswerIndex,
+      isCorrect,
+    };
+
+    setQuestionsAttempted([...questionsAttempted, attempt]);
     setIsSubmitted(true);
 
-    if (selectedOption === currentQuestion.correctAnswerIndex) {
+    if (isCorrect) {
       setScore(score + 1);
     }
   };
@@ -132,7 +182,72 @@ export default function QuizScreen() {
       setIsSubmitted(false);
       setSelectedOption(null);
     } else {
-      setScreenState("result");
+      // Quiz completed - save results
+      saveQuizAttempt();
+    }
+  };
+
+  const saveQuizAttempt = async () => {
+    setScreenState("saving");
+
+    const endTime = Date.now();
+    const timeTaken = Math.round((endTime - startTime) / 1000); // in seconds
+    
+    // Use the current score and questionsAttempted - they already include all answers
+    const finalScore = score;
+    const percentage = Math.round((finalScore / totalQuestions) * 100);
+    const passingScore = Math.ceil(totalQuestions * 0.8);
+    const isPassed = finalScore >= passingScore;
+
+    const attemptData = {
+      email: userEmail,
+      quizType,
+      totalQuestions,
+      correctAnswers: finalScore,
+      score: percentage,
+      isPassed,
+      timeTaken,
+      questionsAttempted: questionsAttempted,
+    };
+
+    try {
+      console.log("Saving quiz attempt for email:", userEmail);
+      console.log("Quiz data:", {
+        correctAnswers: finalScore,
+        totalQuestions,
+        percentage,
+        isPassed,
+        totalAttempts: questionsAttempted.length
+      });
+      
+      const response = await fetch(`${API_URL}/api/quiz/save`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(attemptData),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        console.log("Quiz attempt saved successfully:", data.attemptId);
+        setScreenState("result");
+      } else {
+        throw new Error(data.message || "Failed to save quiz attempt");
+      }
+    } catch (error) {
+      console.error("Error saving quiz attempt:", error);
+      Alert.alert(
+        "Save Failed",
+        "Your results couldn't be saved, but you can still view them.",
+        [
+          {
+            text: "OK",
+            onPress: () => setScreenState("result"),
+          },
+        ]
+      );
     }
   };
 
@@ -141,12 +256,24 @@ export default function QuizScreen() {
   };
 
   // --- LOADING SCREEN ---
-  if (screenState === "loading") {
+  if (screenState === "loading" || !userEmail) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#2563EB" />
           <Text style={styles.loadingText}>Loading quiz...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // --- SAVING SCREEN ---
+  if (screenState === "saving") {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#2563EB" />
+          <Text style={styles.loadingText}>Saving your results...</Text>
         </View>
       </SafeAreaView>
     );
@@ -169,6 +296,7 @@ export default function QuizScreen() {
           </View>
           <Text style={styles.introTitle}>Ready?</Text>
           <Text style={styles.introSubtitle}>{getQuizDescription()}</Text>
+          
           <TouchableOpacity style={styles.primaryBtn} onPress={handleStartQuiz}>
             <Text style={styles.primaryBtnText}>Start Quiz</Text>
           </TouchableOpacity>
@@ -218,6 +346,11 @@ export default function QuizScreen() {
             </View>
           </View>
 
+          <View style={styles.savedIndicator}>
+            <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+            <Text style={styles.savedText}>Results saved to your history</Text>
+          </View>
+
           <TouchableOpacity style={styles.primaryBtn} onPress={handleRestart}>
             <Text style={styles.primaryBtnText}>Back to Home</Text>
           </TouchableOpacity>
@@ -255,7 +388,6 @@ export default function QuizScreen() {
 
         <Text style={styles.questionText}>{currentQuestion.question}</Text>
 
-        {/* Image (if available) */}
         {currentQuestion.imageUrl ? (
           <View style={styles.imageContainer}>
             <Image
@@ -273,7 +405,7 @@ export default function QuizScreen() {
         <View style={styles.optionsContainer}>
           {currentQuestion.options.map((option, index) => {
             let borderColor = "#E5E7EB";
-            let iconName = "radio-button-off";
+            let iconName: keyof typeof Ionicons.glyphMap = "radio-button-off";
             let iconColor = "#9CA3AF";
 
             if (isSubmitted) {
@@ -311,7 +443,7 @@ export default function QuizScreen() {
                 disabled={isSubmitted}
               >
                 <Ionicons
-                  name={iconName as any}
+                  name={iconName}
                   size={24}
                   color={iconColor}
                   style={{ marginRight: 12 }}
@@ -506,7 +638,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 16,
     width: "100%",
-    marginBottom: 32,
+    marginBottom: 24,
   },
   statBoxGreen: {
     flex: 1,
@@ -524,6 +656,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   statTextRed: { color: "#EF4444", fontWeight: "bold", fontSize: 16 },
+  savedIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#ECFDF5",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginBottom: 24,
+    gap: 8,
+  },
+  savedText: {
+    color: "#059669",
+    fontSize: 14,
+    fontWeight: "500",
+  },
   primaryBtn: {
     backgroundColor: "#2563EB",
     width: "100%",

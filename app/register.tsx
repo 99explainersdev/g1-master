@@ -13,11 +13,14 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useAuth } from "@/context/AuthContext";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const API_URL = "https://g1-master-admin.vercel.app";
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const { login } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -57,16 +60,34 @@ export default function RegisterScreen() {
         throw new Error(data.error || "Registration failed");
       }
 
-      Alert.alert(
-        "Success", 
-        "Account created successfully! Please login to continue.", 
-        [
-          {
-            text: "OK",
-            onPress: () => router.replace("/login"),
-          },
-        ]
-      );
+      // Check if the backend returns token and user data for auto-login
+      if (data.token && data.user) {
+        // Auto-login after registration
+        await AsyncStorage.removeItem("userEmail"); // Clear any old data
+        await AsyncStorage.setItem("userEmail", data.user.email);
+        await login(data.token, data.user);
+        
+        console.log("✅ User registered and logged in:", data.user.email);
+        
+        Alert.alert(
+          "Success", 
+          "Account created successfully! Welcome!", 
+          [{ text: "OK" }]
+        );
+        // Navigation happens automatically via AuthContext
+      } else {
+        // Fallback: redirect to login if no auto-login data
+        Alert.alert(
+          "Success", 
+          "Account created successfully! Please login to continue.", 
+          [
+            {
+              text: "OK",
+              onPress: () => router.replace("/login"),
+            },
+          ]
+        );
+      }
     } catch (error: any) {
       Alert.alert("Error", error.message || "Something went wrong");
     } finally {
