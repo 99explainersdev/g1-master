@@ -12,6 +12,7 @@ import {
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 const API_URL = "https://g1-master-admin.vercel.app";
 
@@ -38,6 +39,10 @@ interface Topic {
 }
 
 export default function LearnScreen() {
+  const router = useRouter();
+  const params = useLocalSearchParams();
+  const topicIdFromParams = params.topicId as string | undefined;
+
   const [viewState, setViewState] = useState<"list" | "detail">("list");
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
   const [topics, setTopics] = useState<Topic[]>([]);
@@ -48,6 +53,16 @@ export default function LearnScreen() {
   useEffect(() => {
     fetchTopics();
   }, []);
+
+  // Handle navigation from home screen
+  useEffect(() => {
+    if (topicIdFromParams && topics.length > 0) {
+      const topic = topics.find((t) => t.id === topicIdFromParams);
+      if (topic) {
+        handleTopicPress(topic);
+      }
+    }
+  }, [topicIdFromParams, topics]);
 
   const fetchTopics = async () => {
     try {
@@ -75,6 +90,15 @@ export default function LearnScreen() {
 
   const handleComplete = () => {
     setViewState("list");
+    setSelectedTopic(null);
+    // Clear the topicId param by navigating back to learn without params
+    router.setParams({ topicId: undefined });
+  };
+
+  const handleBackToList = () => {
+    setViewState("list");
+    setSelectedTopic(null);
+    router.setParams({ topicId: undefined });
   };
 
   // Filter topics based on search
@@ -119,11 +143,19 @@ export default function LearnScreen() {
                 onPress={() => handleTopicPress(item)}
               >
                 <View style={[styles.iconBox, { backgroundColor: item.color }]}>
-                  <Ionicons
-                    name={item.icon as any}
-                    size={24}
-                    color={item.iconColor}
-                  />
+                  {item.signImage ? (
+                    <Image
+                      source={{ uri: item.signImage }}
+                      style={styles.iconImage}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <Ionicons
+                      name={item.icon as any}
+                      size={24}
+                      color={item.iconColor}
+                    />
+                  )}
                 </View>
                 <View style={styles.topicInfo}>
                   <Text style={styles.topicTitle}>{item.title}</Text>
@@ -144,7 +176,7 @@ export default function LearnScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.detailHeader}>
-        <TouchableOpacity onPress={() => setViewState("list")}>
+        <TouchableOpacity onPress={handleBackToList}>
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.detailHeaderTitle}>{selectedTopic.title}</Text>
@@ -302,6 +334,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginRight: 16,
+    overflow: "hidden",
+  },
+  iconImage: {
+    width: "100%",
+    height: "100%",
   },
   topicInfo: { flex: 1 },
   topicTitle: { fontSize: 16, fontWeight: "bold", color: "#111827" },
@@ -329,7 +366,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
   },
-  signImageContainer: { 
+  signImageContainer: {
     marginBottom: 16,
     width: 200,
     height: 200,
@@ -344,7 +381,12 @@ const styles = StyleSheet.create({
   tag: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 },
   tagText: { fontWeight: "bold", fontSize: 11, textTransform: "uppercase" },
   contentSection: { marginBottom: 24 },
-  sectionHeading: { fontSize: 18, fontWeight: "bold", marginBottom: 10, color: "#111827" },
+  sectionHeading: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 10,
+    color: "#111827",
+  },
   sectionBody: { fontSize: 15, color: "#4B5563", lineHeight: 22 },
   stepRow: { flexDirection: "row", marginBottom: 16 },
   stepNumber: {
@@ -381,4 +423,3 @@ const styles = StyleSheet.create({
   },
   completeBtnText: { color: "#FFF", fontSize: 16, fontWeight: "bold" },
 });
-

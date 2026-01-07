@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   StyleSheet,
   View,
@@ -6,15 +6,100 @@ import {
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
+  ActivityIndicator,
+  Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Stack } from "expo-router";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/context/AuthContext";
 
+const API_URL = "https://g1-master-admin.vercel.app";
+
+interface QuizStatistics {
+  totalAttempts: number;
+  passedAttempts: number;
+  failedAttempts: number;
+  averageScore: number;
+  passRate: number;
+}
+
+interface Topic {
+  id: string;
+  title: string;
+  count: string;
+  icon: string;
+  color: string;
+  iconColor: string;
+  tag: string;
+  mainSignName: string;
+  signImage: string;
+  description: string;
+  steps: Array<{
+    title: string;
+    desc: string;
+  }>;
+  commonMistake: string;
+  proTip: string;
+  legalNote: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const [statistics, setStatistics] = useState<QuizStatistics | null>(null);
+  const [topics, setTopics] = useState<Topic[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [topicsLoading, setTopicsLoading] = useState(true);
+
+  useEffect(() => {
+    if (user?.email) {
+      fetchUserStats();
+    }
+    fetchTopics();
+  }, [user?.email]);
+
+  const fetchUserStats = async () => {
+    try {
+      const response = await fetch(
+        `${API_URL}/api/user/stats?email=${encodeURIComponent(user?.email || "")}`
+      );
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setStatistics(data.data.statistics);
+      }
+    } catch (error) {
+      console.error("Error fetching user stats:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchTopics = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/topics`);
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setTopics(data.topics);
+      }
+    } catch (error) {
+      console.error("Error fetching topics:", error);
+    } finally {
+      setTopicsLoading(false);
+    }
+  };
+
+  const handleTopicPress = (topic: Topic) => {
+    // Navigate to learn screen with the topic data
+    router.push({
+      pathname: "/learn",
+      params: { topicId: topic.id }
+    });
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -57,18 +142,34 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Stats Row - Updated */}
+        {/* Stats Row - Updated with Backend Data */}
         <View style={styles.statsContainer}>
           <View style={styles.statCard}>
             <Ionicons name="trending-up" size={28} color="#10B981" />
-            <Text style={styles.statValue}>{user?.stats.avgScore || 0}%</Text>
-            <Text style={styles.statLabel}>AVG SCORE</Text>
+            {loading ? (
+              <ActivityIndicator size="small" color="#10B981" style={{ marginTop: 8 }} />
+            ) : (
+              <>
+                <Text style={styles.statValue}>
+                  {statistics?.averageScore?.toFixed(0) || 0}%
+                </Text>
+                <Text style={styles.statLabel}>AVG SCORE</Text>
+              </>
+            )}
           </View>
 
           <View style={styles.statCard}>
-            <Ionicons name="clipboard" size={28} color="#F59E0B" />
-            <Text style={styles.statValue}>{user?.stats.totalQuizzes || 0}</Text>
-            <Text style={styles.statLabel}>TOTAL QUIZZES</Text>
+            <Ionicons name="checkmark-circle" size={28} color="#F59E0B" />
+            {loading ? (
+              <ActivityIndicator size="small" color="#F59E0B" style={{ marginTop: 8 }} />
+            ) : (
+              <>
+                <Text style={styles.statValue}>
+                  {statistics?.passRate?.toFixed(0) || 0}%
+                </Text>
+                <Text style={styles.statLabel}>PASS RATE</Text>
+              </>
+            )}
           </View>
         </View>
 
@@ -133,60 +234,41 @@ export default function HomeScreen() {
           </View>
 
           {/* Road Test Topics - Horizontal Scroll */}
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            style={styles.roadTestScrollView}
-            contentContainerStyle={styles.roadTestScroll}
-          >
-            {/* Topic 1 */}
-            <TouchableOpacity
-              style={styles.roadTestCard}
-              onPress={() => router.push("/learn")}
+          {topicsLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color="#2563EB" />
+            </View>
+          ) : (
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              style={styles.roadTestScrollView}
+              contentContainerStyle={styles.roadTestScroll}
             >
-              <View style={[styles.roadTestIcon, { backgroundColor: "#DCFCE7" }]}>
-                <Ionicons name="shield-checkmark" size={28} color="#16A34A" />
-              </View>
-              <Text style={styles.roadTestTitle}>Safety Tips</Text>
-              <Text style={styles.roadTestSub}>12 Topics</Text>
-            </TouchableOpacity>
-
-            {/* Topic 2 */}
-            <TouchableOpacity
-              style={styles.roadTestCard}
-              onPress={() => router.push("/learn")}
-            >
-              <View style={[styles.roadTestIcon, { backgroundColor: "#FEF3C7" }]}>
-                <Ionicons name="car-sport" size={28} color="#D97706" />
-              </View>
-              <Text style={styles.roadTestTitle}>Parking</Text>
-              <Text style={styles.roadTestSub}>8 Topics</Text>
-            </TouchableOpacity>
-
-            {/* Topic 3 */}
-            <TouchableOpacity
-              style={styles.roadTestCard}
-              onPress={() => router.push("/learn")}
-            >
-              <View style={[styles.roadTestIcon, { backgroundColor: "#E0E7FF" }]}>
-                <Ionicons name="navigate" size={28} color="#4F46E5" />
-              </View>
-              <Text style={styles.roadTestTitle}>Intersections</Text>
-              <Text style={styles.roadTestSub}>10 Topics</Text>
-            </TouchableOpacity>
-
-            {/* Topic 4 */}
-            <TouchableOpacity
-              style={styles.roadTestCard}
-              onPress={() => router.push("/learn")}
-            >
-              <View style={[styles.roadTestIcon, { backgroundColor: "#FCE7F3" }]}>
-                <Ionicons name="speedometer" size={28} color="#EC4899" />
-              </View>
-              <Text style={styles.roadTestTitle}>Speed Control</Text>
-              <Text style={styles.roadTestSub}>6 Topics</Text>
-            </TouchableOpacity>
-          </ScrollView>
+              {topics.map((topic) => (
+                <TouchableOpacity
+                  key={topic.id}
+                  style={styles.roadTestCard}
+                  onPress={() => handleTopicPress(topic)}
+                >
+                  <View style={styles.topicImageContainer}>
+                    <Image 
+                      source={{ uri: topic.signImage }}
+                      style={styles.topicImage}
+                      resizeMode="cover"
+                    />
+                  </View>
+                  <Text style={styles.roadTestTitle} numberOfLines={2}>
+                    {topic.title}
+                  </Text>
+                  <Text style={styles.roadTestDescription} numberOfLines={2}>
+                    {topic.description}
+                  </Text>
+                  <Text style={styles.roadTestSub}>{topic.count}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -200,8 +282,13 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingTop: 20,
-    paddingBottom: 100, // Increased padding to show full cards at bottom
+    paddingBottom: 100,
     paddingHorizontal: 20,
+  },
+  loadingContainer: {
+    padding: 20,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   // Header
@@ -294,6 +381,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
+    minHeight: 120,
   },
   statValue: {
     fontSize: 24,
@@ -383,9 +471,9 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  // Road Test Cards (Horizontal Scroll)
+  // Road Test Cards (Horizontal Scroll) - Updated
   roadTestScrollView: {
-    marginHorizontal: -20, // Offset parent padding
+    marginHorizontal: -20,
     padding: 5
   },
   roadTestScroll: {
@@ -396,29 +484,41 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
     padding: 16,
-    width: 140,
+    width: 160,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
   },
-  roadTestIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: "center",
-    alignItems: "center",
+  topicImageContainer: {
+    width: "100%",
+    height: 100,
+    borderRadius: 12,
+    overflow: "hidden",
     marginBottom: 12,
+    backgroundColor: "#F3F4F6",
+  },
+  topicImage: {
+    width: "100%",
+    height: "100%",
   },
   roadTestTitle: {
     fontSize: 14,
     fontWeight: "bold",
     color: "#111827",
-    marginBottom: 4,
+    marginBottom: 6,
+    lineHeight: 18,
+  },
+  roadTestDescription: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginBottom: 8,
+    lineHeight: 16,
   },
   roadTestSub: {
-    fontSize: 12,
+    fontSize: 11,
     color: "#9CA3AF",
+    fontWeight: "600",
   },
 });
