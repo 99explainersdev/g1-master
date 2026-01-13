@@ -14,6 +14,8 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "expo-router";
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback } from 'react';
 
 const API_URL = "https://g1-master-admin.vercel.app";
 
@@ -45,11 +47,14 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
+  // Refresh data when screen comes into focus
+useFocusEffect(
+  useCallback(() => {
     if (user?.email) {
       fetchUserStats();
     }
-  }, [user?.email]);
+  }, [user?.email])
+);
 
   const fetchUserStats = async () => {
     try {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -76,46 +77,65 @@ export default function QuizScreen() {
   };
 
   // Fetch questions based on quiz type
-  useEffect(() => {
+useEffect(() => {
+  if (userEmail) {
+    fetchQuestions();
+  }
+}, [quizType, userEmail]);
+
+const fetchQuestions = async () => {
+  try {
+    setScreenState("loading");
+    
+    let apiUrl = `${API_URL}/api/quiz`;
+    
+    if (quizType === "quick") {
+      apiUrl += "?random=true&limit=20";
+    } else if (quizType === "traffic_signs") {
+      apiUrl += "?category=traffic_signs";
+    } else if (quizType === "rules_of_road") {
+      apiUrl += "?category=rules_of_road";
+    }
+
+    const response = await fetch(apiUrl);
+    const data = await response.json();
+
+    if (response.ok && data.success) {
+      if (data.quizzes.length === 0) {
+        Alert.alert("No Questions", "No questions available for this quiz type.");
+        router.back();
+        return;
+      }
+      setQuestions(data.quizzes);
+      setScreenState("intro");
+    } else {
+      throw new Error("Failed to load questions");
+    }
+  } catch (error) {
+    console.error("Error fetching questions:", error);
+    Alert.alert("Error", "Could not load quiz questions. Please try again.");
+    router.back();
+  }
+};
+
+// Reset quiz state when screen comes into focus
+useFocusEffect(
+  useCallback(() => {
+    // Reset all state when returning to this screen
+    setScreenState("loading");
+    setCurrentQuestionIndex(0);
+    setSelectedOption(null);
+    setIsSubmitted(false);
+    setScore(0);
+    setQuestionsAttempted([]);
+    setStartTime(0);
+    
+    // Fetch fresh questions
     if (userEmail) {
       fetchQuestions();
     }
-  }, [quizType, userEmail]);
-
-  const fetchQuestions = async () => {
-    try {
-      setScreenState("loading");
-      
-      let apiUrl = `${API_URL}/api/quiz`;
-      
-      if (quizType === "quick") {
-        apiUrl += "?random=true&limit=20";
-      } else if (quizType === "traffic_signs") {
-        apiUrl += "?category=traffic_signs";
-      } else if (quizType === "rules_of_road") {
-        apiUrl += "?category=rules_of_road";
-      }
-
-      const response = await fetch(apiUrl);
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        if (data.quizzes.length === 0) {
-          Alert.alert("No Questions", "No questions available for this quiz type.");
-          router.back();
-          return;
-        }
-        setQuestions(data.quizzes);
-        setScreenState("intro");
-      } else {
-        throw new Error("Failed to load questions");
-      }
-    } catch (error) {
-      console.error("Error fetching questions:", error);
-      Alert.alert("Error", "Could not load quiz questions. Please try again.");
-      router.back();
-    }
-  };
+  }, [quizType, userEmail])
+);
 
   const getQuizTitle = () => {
     switch (quizType) {

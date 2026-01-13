@@ -13,6 +13,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { Stack } from "expo-router";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/context/AuthContext";
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback } from 'react';
 
 const API_URL = "https://g1-master-admin.vercel.app";
 
@@ -54,12 +56,15 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [topicsLoading, setTopicsLoading] = useState(true);
 
-  useEffect(() => {
+  // Refresh data when screen comes into focus
+useFocusEffect(
+  useCallback(() => {
     if (user?.email) {
       fetchUserStats();
     }
     fetchTopics();
-  }, [user?.email]);
+  }, [user?.email])
+);
 
   const fetchUserStats = async () => {
     try {
