@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   StyleSheet,
   View,
@@ -10,11 +10,9 @@ import {
   Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Stack } from "expo-router";
-import { useRouter } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import { useAuth } from "@/context/AuthContext";
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback } from 'react';
 
 const API_URL = "https://g1-master-admin.vercel.app";
 
@@ -26,24 +24,14 @@ interface QuizStatistics {
   passRate: number;
 }
 
+// 1. UPDATED INTERFACE TO MATCH YOUR API RESPONSE
 interface Topic {
   id: string;
   title: string;
+  imgUrl: string; // Matches the JSON response
   count: string;
-  icon: string;
-  color: string;
-  iconColor: string;
   tag: string;
-  mainSignName: string;
-  signImage: string;
-  description: string;
-  steps: Array<{
-    title: string;
-    desc: string;
-  }>;
-  commonMistake: string;
-  proTip: string;
-  legalNote: string;
+  isPublished: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -57,14 +45,14 @@ export default function HomeScreen() {
   const [topicsLoading, setTopicsLoading] = useState(true);
 
   // Refresh data when screen comes into focus
-useFocusEffect(
-  useCallback(() => {
-    if (user?.email) {
-      fetchUserStats();
-    }
-    fetchTopics();
-  }, [user?.email])
-);
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.email) {
+        fetchUserStats();
+      }
+      fetchTopics();
+    }, [user?.email])
+  );
 
   const fetchUserStats = async () => {
     try {
@@ -147,7 +135,7 @@ useFocusEffect(
           </TouchableOpacity>
         </View>
 
-        {/* Stats Row - Updated with Backend Data */}
+        {/* Stats Row */}
         <View style={styles.statsContainer}>
           <View style={styles.statCard}>
             <Ionicons name="trending-up" size={28} color="#10B981" />
@@ -256,20 +244,27 @@ useFocusEffect(
                   style={styles.roadTestCard}
                   onPress={() => handleTopicPress(topic)}
                 >
+                  {/* 2. UPDATED IMAGE RENDERING USING imgUrl */}
                   <View style={styles.topicImageContainer}>
                     <Image 
-                      source={{ uri: topic.signImage }}
+                      source={{ uri: topic.imgUrl || "https://via.placeholder.com/150" }}
                       style={styles.topicImage}
                       resizeMode="cover"
                     />
                   </View>
+                  
+                  {/* 3. UPDATED TITLE & REMOVED DESCRIPTION */}
                   <Text style={styles.roadTestTitle} numberOfLines={2}>
                     {topic.title}
                   </Text>
-                  <Text style={styles.roadTestDescription} numberOfLines={2}>
-                    {topic.description}
-                  </Text>
-                  <Text style={styles.roadTestSub}>{topic.count}</Text>
+                  
+                  {/* Optional: Show Tag or Count */}
+                  <View style={styles.metaRow}>
+                    <Text style={styles.roadTestSub}>{topic.count}</Text>
+                    {topic.tag ? (
+                      <Text style={styles.tagText}>• {topic.tag}</Text>
+                    ) : null}
+                  </View>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -367,7 +362,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  // Stats - Updated
+  // Stats
   statsContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -428,7 +423,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  // Part Cards (Knowledge Test)
+  // Part Cards
   partCardsContainer: {
     gap: 16,
   },
@@ -476,7 +471,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  // Road Test Cards (Horizontal Scroll) - Updated
+  // Road Test Cards - UPDATED
   roadTestScrollView: {
     marginHorizontal: -20,
     padding: 5
@@ -488,8 +483,8 @@ const styles = StyleSheet.create({
   roadTestCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
-    padding: 16,
-    width: 160,
+    padding: 12, // Reduced padding slightly
+    width: 170, // Slightly wider for better title fit
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -498,10 +493,10 @@ const styles = StyleSheet.create({
   },
   topicImageContainer: {
     width: "100%",
-    height: 100,
+    height: 110,
     borderRadius: 12,
     overflow: "hidden",
-    marginBottom: 12,
+    marginBottom: 10,
     backgroundColor: "#F3F4F6",
   },
   topicImage: {
@@ -509,21 +504,25 @@ const styles = StyleSheet.create({
     height: "100%",
   },
   roadTestTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "bold",
     color: "#111827",
     marginBottom: 6,
-    lineHeight: 18,
+    lineHeight: 20,
   },
-  roadTestDescription: {
-    fontSize: 12,
-    color: "#6B7280",
-    marginBottom: 8,
-    lineHeight: 16,
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   roadTestSub: {
-    fontSize: 11,
-    color: "#9CA3AF",
+    fontSize: 12,
+    color: "#6B7280",
+    fontWeight: "500",
+  },
+  tagText: {
+    fontSize: 12,
+    color: "#2563EB",
     fontWeight: "600",
+    marginLeft: 4,
   },
 });

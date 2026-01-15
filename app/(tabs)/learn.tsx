@@ -16,26 +16,48 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 
 const API_URL = "https://g1-master-admin.vercel.app";
 
+/* ---------- TYPES ---------- */
+
 interface Step {
   title: string;
   desc: string;
 }
 
+// New Content Block Types
+type ContentBlock =
+  | {
+      type: "text";
+      data: { text: string };
+    }
+  | {
+      type: "image";
+      data: { imageUrl: string; caption?: string };
+    }
+  | {
+      type: "steps";
+      data: { steps: Step[] };
+    }
+  | {
+      type: "note";
+      data: { text: string; level: "info" | "warning" | "danger" };
+    };
+
 interface Topic {
   id: string;
   title: string;
+  imgUrl: string; // Updated from signImage
   count: string;
-  icon: string;
-  color: string;
-  iconColor: string;
   tag: string;
-  mainSignName: string;
-  signImage?: string;
-  description: string;
-  steps: Step[];
-  commonMistake: string;
-  proTip: string;
-  legalNote: string;
+  // Make these optional as they might not be in the new API response,
+  // we will provide defaults if missing
+  icon?: string;
+  color?: string;
+  iconColor?: string;
+
+  // The new flexible structure
+  contentBlocks: ContentBlock[];
+
+  isPublished?: boolean;
 }
 
 export default function LearnScreen() {
@@ -91,7 +113,6 @@ export default function LearnScreen() {
   const handleComplete = () => {
     setViewState("list");
     setSelectedTopic(null);
-    // Clear the topicId param by navigating back to learn without params
     router.setParams({ topicId: undefined });
   };
 
@@ -101,10 +122,108 @@ export default function LearnScreen() {
     router.setParams({ topicId: undefined });
   };
 
+  // Helper for defaults since specific colors/icons were removed from backend
+  const getTopicColor = (tag: string) => {
+    const t = tag.toLowerCase();
+    if (t.includes("beginner")) return { bg: "#DBEAFE", text: "#1E40AF" }; // Blue
+    if (t.includes("advanced")) return { bg: "#FCE7F3", text: "#9D174D" }; // Pink
+    if (t.includes("warning")) return { bg: "#FEE2E2", text: "#991B1B" }; // Red
+    return { bg: "#F3F4F6", text: "#374151" }; // Gray default
+  };
+
   // Filter topics based on search
   const filteredTopics = topics.filter((topic) =>
     topic.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  /* ---------- BLOCK RENDERER ---------- */
+  const renderContentBlock = (block: ContentBlock, index: number) => {
+    switch (block.type) {
+      case "text":
+        return (
+          <View key={index} style={styles.contentSection}>
+            <Text style={styles.sectionBody}>{block.data.text}</Text>
+          </View>
+        );
+
+      case "image":
+        return (
+          <View key={index} style={styles.contentSection}>
+            <View style={styles.contentImageContainer}>
+              <Image
+                source={{ uri: block.data.imageUrl }}
+                style={styles.contentImage}
+                resizeMode="contain"
+              />
+            </View>
+            {block.data.caption ? (
+              <Text style={styles.imageCaption}>{block.data.caption}</Text>
+            ) : null}
+          </View>
+        );
+
+      case "steps":
+        return (
+          <View key={index} style={styles.contentSection}>
+            {block.data.steps.map((step, idx) => (
+              <View key={idx} style={styles.stepRow}>
+                <View style={styles.stepNumber}>
+                  <Text style={styles.stepNumberText}>{idx + 1}</Text>
+                </View>
+                <View style={styles.stepTextContent}>
+                  <Text style={styles.stepTitle}>{step.title}</Text>
+                  <Text style={styles.stepDescription}>{step.desc}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        );
+
+      case "note":
+        let bg = "#EFF6FF"; // info - blue
+        let border = "#BFDBFE";
+        let text = "#1E3A8A";
+        let iconName: any = "information-circle";
+        let iconColor = "#2563EB";
+
+        if (block.data.level === "warning") {
+          bg = "#FEFCE8"; // yellow
+          border = "#FEF08A";
+          text = "#854D0E";
+          iconName = "warning";
+          iconColor = "#EAB308";
+        } else if (block.data.level === "danger") {
+          bg = "#FEF2F2"; // red
+          border = "#FECACA";
+          text = "#991B1B";
+          iconName = "alert-circle";
+          iconColor = "#EF4444";
+        }
+
+        return (
+          <View
+            key={index}
+            style={[
+              styles.infoBox,
+              { backgroundColor: bg, borderColor: border },
+            ]}
+          >
+            <Ionicons name={iconName} size={20} color={iconColor} />
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <Text style={[styles.infoBoxTitle, { color: iconColor }]}>
+                {block.data.level.toUpperCase()}
+              </Text>
+              <Text style={[styles.infoBoxText, { color: text }]}>
+                {block.data.text}
+              </Text>
+            </View>
+          </View>
+        );
+
+      default:
+        return null;
+    }
+  };
 
   // --- 1. LIST VIEW ---
   if (viewState === "list") {
@@ -136,34 +255,43 @@ export default function LearnScreen() {
               <Text style={styles.emptyText}>No topics found</Text>
             </View>
           ) : (
-            filteredTopics.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={styles.topicCard}
-                onPress={() => handleTopicPress(item)}
-              >
-                <View style={[styles.iconBox, { backgroundColor: item.color }]}>
-                  {item.signImage ? (
-                    <Image
-                      source={{ uri: item.signImage }}
-                      style={styles.iconImage}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <Ionicons
-                      name={item.icon as any}
-                      size={24}
-                      color={item.iconColor}
-                    />
-                  )}
-                </View>
-                <View style={styles.topicInfo}>
-                  <Text style={styles.topicTitle}>{item.title}</Text>
-                  <Text style={styles.topicSub}>{item.count}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
-              </TouchableOpacity>
-            ))
+            filteredTopics.map((item) => {
+              const theme = getTopicColor(item.tag);
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.topicCard}
+                  onPress={() => handleTopicPress(item)}
+                >
+                  <View style={[styles.iconBox, { backgroundColor: theme.bg }]}>
+                    {/* Prioritize imgUrl for the thumbnail */}
+                    {item.imgUrl ? (
+                      <Image
+                        source={{ uri: item.imgUrl }}
+                        style={styles.iconImage}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <Ionicons
+                        name="book-outline"
+                        size={24}
+                        color={theme.text}
+                      />
+                    )}
+                  </View>
+                  <View style={styles.topicInfo}>
+                    <Text style={styles.topicTitle}>{item.title}</Text>
+                    <View style={styles.metaRow}>
+                      <Text style={styles.topicSub}>{item.count}</Text>
+                      <Text style={[styles.listTag, { color: theme.text }]}>
+                        • {item.tag}
+                      </Text>
+                    </View>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                </TouchableOpacity>
+              );
+            })
           )}
         </ScrollView>
       </SafeAreaView>
@@ -173,23 +301,28 @@ export default function LearnScreen() {
   // --- 2. DETAIL VIEW ---
   if (!selectedTopic) return null;
 
+  const theme = getTopicColor(selectedTopic.tag);
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.detailHeader}>
         <TouchableOpacity onPress={handleBackToList}>
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
-        <Text style={styles.detailHeaderTitle}>{selectedTopic.title}</Text>
+        {/* Truncate title in header if too long */}
+        <Text style={styles.detailHeaderTitle} numberOfLines={1}>
+          {selectedTopic.title}
+        </Text>
         <View style={{ width: 24 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.detailScrollContent}>
         {/* Sign/Main Visual Card */}
         <View style={styles.signCard}>
-          {selectedTopic.signImage ? (
+          {selectedTopic.imgUrl ? (
             <View style={styles.signImageContainer}>
               <Image
-                source={{ uri: selectedTopic.signImage }}
+                source={{ uri: selectedTopic.imgUrl }}
                 style={styles.signImage}
                 resizeMode="contain"
               />
@@ -199,73 +332,28 @@ export default function LearnScreen() {
               <Ionicons name="image-outline" size={100} color="#9CA3AF" />
             </View>
           )}
-          <Text style={styles.signTitle}>{selectedTopic.mainSignName}</Text>
-          <View style={[styles.tag, { backgroundColor: selectedTopic.color }]}>
-            <Text style={[styles.tagText, { color: selectedTopic.iconColor }]}>
+
+          <Text style={styles.signTitle}>{selectedTopic.title}</Text>
+
+          <View style={[styles.tag, { backgroundColor: theme.bg }]}>
+            <Text style={[styles.tagText, { color: theme.text }]}>
               {selectedTopic.tag}
             </Text>
           </View>
         </View>
 
-        {/* Section: Description */}
-        <View style={styles.contentSection}>
-          <Text style={styles.sectionHeading}>What it means</Text>
-          <Text style={styles.sectionBody}>{selectedTopic.description}</Text>
-        </View>
-
-        {/* Section: Steps/Action */}
-        <View style={styles.contentSection}>
-          <Text style={styles.sectionHeading}>Proper Procedure</Text>
-          {selectedTopic.steps.map((step: Step, idx: number) => (
-            <View key={idx} style={styles.stepRow}>
-              <View style={styles.stepNumber}>
-                <Text style={styles.stepNumberText}>{idx + 1}</Text>
-              </View>
-              <View style={styles.stepTextContent}>
-                <Text style={styles.stepTitle}>{step.title}</Text>
-                <Text style={styles.stepDescription}>{step.desc}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-
-        {/* Common Mistake */}
-        <View style={styles.infoBox}>
-          <Ionicons name="alert-circle" size={20} color="#EF4444" />
-          <View style={{ flex: 1, marginLeft: 10 }}>
-            <Text style={styles.infoBoxTitle}>Common Mistake</Text>
-            <Text style={styles.infoBoxText}>
-              {selectedTopic.commonMistake}
-            </Text>
-          </View>
-        </View>
-
-        {/* Pro Tip */}
-        <View
-          style={[
-            styles.infoBox,
-            { backgroundColor: "#F0F9FF", borderColor: "#BAE6FD" },
-          ]}
-        >
-          <Ionicons name="bulb" size={20} color="#0284C7" />
-          <View style={{ flex: 1, marginLeft: 10 }}>
-            <Text style={[styles.infoBoxTitle, { color: "#0369A1" }]}>
-              Pro-Tip
-            </Text>
-            <Text style={[styles.infoBoxText, { color: "#0C4A6E" }]}>
-              {selectedTopic.proTip}
-            </Text>
-          </View>
-        </View>
-
-        {/* Legal Note */}
-        <View style={styles.contentSection}>
-          <Text style={styles.sectionHeading}>Legal Requirement</Text>
-          <Text style={styles.sectionBody}>{selectedTopic.legalNote}</Text>
-        </View>
+        {/* DYNAMIC CONTENT BLOCKS */}
+        {selectedTopic.contentBlocks &&
+        selectedTopic.contentBlocks.length > 0 ? (
+          selectedTopic.contentBlocks.map((block, index) =>
+            renderContentBlock(block, index)
+          )
+        ) : (
+          <Text style={styles.sectionBody}>No content details available.</Text>
+        )}
 
         <TouchableOpacity style={styles.completeBtn} onPress={handleComplete}>
-          <Text style={styles.completeBtnText}>Complete</Text>
+          <Text style={styles.completeBtnText}>Complete Topic</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -343,6 +431,8 @@ const styles = StyleSheet.create({
   topicInfo: { flex: 1 },
   topicTitle: { fontSize: 16, fontWeight: "bold", color: "#111827" },
   topicSub: { fontSize: 13, color: "#6B7280" },
+  metaRow: { flexDirection: "row", alignItems: "center", marginTop: 2 },
+  listTag: { fontSize: 12, marginLeft: 6, fontWeight: "600" },
 
   // Detail View
   detailHeader: {
@@ -352,7 +442,12 @@ const styles = StyleSheet.create({
     padding: 16,
     backgroundColor: "#FFF",
   },
-  detailHeaderTitle: { fontSize: 18, fontWeight: "bold" },
+  detailHeaderTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    flex: 1,
+    textAlign: "center",
+  },
   detailScrollContent: { padding: 20 },
   signCard: {
     backgroundColor: "#FFF",
@@ -368,7 +463,7 @@ const styles = StyleSheet.create({
   },
   signImageContainer: {
     marginBottom: 16,
-    width: 200,
+    width: "100%",
     height: 200,
     justifyContent: "center",
     alignItems: "center",
@@ -377,17 +472,39 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
-  signTitle: { fontSize: 22, fontWeight: "bold", marginBottom: 8 },
+  signTitle: {
+    fontSize: 22,
+    fontWeight: "bold",
+    marginBottom: 8,
+    textAlign: "center",
+  },
   tag: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 },
   tagText: { fontWeight: "bold", fontSize: 11, textTransform: "uppercase" },
-  contentSection: { marginBottom: 24 },
-  sectionHeading: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 10,
-    color: "#111827",
+
+  // Content Rendering
+  contentSection: { marginBottom: 20 },
+  sectionBody: { fontSize: 16, color: "#374151", lineHeight: 24 },
+
+  contentImageContainer: {
+    width: "100%",
+    height: 200,
+    borderRadius: 12,
+    overflow: "hidden",
+    marginBottom: 8,
+    backgroundColor: "#F3F4F6",
   },
-  sectionBody: { fontSize: 15, color: "#4B5563", lineHeight: 22 },
+  contentImage: {
+    width: "100%",
+    height: "100%",
+  },
+  imageCaption: {
+    fontSize: 12,
+    color: "#6B7280",
+    fontStyle: "italic",
+    textAlign: "center",
+  },
+
+  // Steps
   stepRow: { flexDirection: "row", marginBottom: 16 },
   stepNumber: {
     width: 24,
@@ -401,18 +518,24 @@ const styles = StyleSheet.create({
   stepNumberText: { color: "#FFF", fontWeight: "bold", fontSize: 12 },
   stepTextContent: { flex: 1 },
   stepTitle: { fontSize: 16, fontWeight: "bold", color: "#111827" },
-  stepDescription: { fontSize: 14, color: "#6B7280", marginTop: 2 },
+  stepDescription: {
+    fontSize: 14,
+    color: "#6B7280",
+    marginTop: 2,
+    lineHeight: 20,
+  },
+
+  // Notes
   infoBox: {
     flexDirection: "row",
-    backgroundColor: "#FEF2F2",
     padding: 16,
     borderRadius: 12,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "#FECACA",
   },
-  infoBoxTitle: { fontWeight: "bold", color: "#991B1B", marginBottom: 2 },
-  infoBoxText: { fontSize: 14, color: "#7F1D1D", lineHeight: 20 },
+  infoBoxTitle: { fontWeight: "bold", fontSize: 12, marginBottom: 4 },
+  infoBoxText: { fontSize: 14, lineHeight: 20 },
+
   completeBtn: {
     backgroundColor: "#2563EB",
     borderRadius: 12,
