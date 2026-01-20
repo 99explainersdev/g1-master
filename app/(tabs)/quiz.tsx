@@ -37,15 +37,19 @@ interface QuestionAttempt {
 export default function QuizScreen() {
   const params = useLocalSearchParams();
   const router = useRouter();
-  const quizType = params.type as string || "quick";
+  const quizType = (params.type as string) || "quick";
 
-  const [screenState, setScreenState] = useState<"loading" | "intro" | "quiz" | "result" | "saving">("loading");
+  const [screenState, setScreenState] = useState<
+    "loading" | "intro" | "quiz" | "result" | "saving"
+  >("loading");
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [score, setScore] = useState(0);
-  const [questionsAttempted, setQuestionsAttempted] = useState<QuestionAttempt[]>([]);
+  const [questionsAttempted, setQuestionsAttempted] = useState<
+    QuestionAttempt[]
+  >([]);
   const [startTime, setStartTime] = useState<number>(0);
   const [userEmail, setUserEmail] = useState<string>("");
 
@@ -60,82 +64,86 @@ export default function QuizScreen() {
   const getUserEmail = async () => {
     try {
       const email = await AsyncStorage.getItem("userEmail");
-      
+
       if (!email) {
-        // User is not logged in - redirect to login screen
         console.log("No user email found - redirecting to login");
-        router.replace("/login"); // Update this path to match your login route
+        router.replace("/login");
         return;
       }
-      
+
       setUserEmail(email);
     } catch (error) {
       console.error("Error getting user email:", error);
-      // If there's an error reading the email, redirect to login
       router.replace("/login");
     }
   };
 
   // Fetch questions based on quiz type
-useEffect(() => {
-  if (userEmail) {
-    fetchQuestions();
-  }
-}, [quizType, userEmail]);
-
-const fetchQuestions = async () => {
-  try {
-    setScreenState("loading");
-    
-    let apiUrl = `${API_URL}/api/quiz`;
-    
-    if (quizType === "quick") {
-      apiUrl += "?random=true&limit=20";
-    } else if (quizType === "traffic_signs") {
-      apiUrl += "?category=traffic_signs";
-    } else if (quizType === "rules_of_road") {
-      apiUrl += "?category=rules_of_road";
-    }
-
-    const response = await fetch(apiUrl);
-    const data = await response.json();
-
-    if (response.ok && data.success) {
-      if (data.quizzes.length === 0) {
-        Alert.alert("No Questions", "No questions available for this quiz type.");
-        router.back();
-        return;
-      }
-      setQuestions(data.quizzes);
-      setScreenState("intro");
-    } else {
-      throw new Error("Failed to load questions");
-    }
-  } catch (error) {
-    console.error("Error fetching questions:", error);
-    Alert.alert("Error", "Could not load quiz questions. Please try again.");
-    router.back();
-  }
-};
-
-// Reset quiz state when screen comes into focus
-useFocusEffect(
-  useCallback(() => {
-    // Reset all state when returning to this screen
-    setScreenState("loading");
-    setCurrentQuestionIndex(0);
-    setSelectedOption(null);
-    setIsSubmitted(false);
-    setScore(0);
-    setQuestionsAttempted([]);
-    setStartTime(0);
-    
-    // Fetch fresh questions
+  useEffect(() => {
     if (userEmail) {
       fetchQuestions();
     }
-  }, [quizType, userEmail])
-);
+  }, [quizType, userEmail]);
+
+  const fetchQuestions = async () => {
+    try {
+      setScreenState("loading");
+
+      let apiUrl = `${API_URL}/api/quiz`;
+
+      // --- UPDATED LOGIC HERE ---
+      if (quizType === "quick") {
+        // Requirement: "For 20 mixed questions it will always be same questions"
+        // We REMOVE 'random=true' so it fetches the static list, and limit to 20.
+        apiUrl += "?limit=20";
+      } else if (quizType === "traffic_signs") {
+        // Requirement: "Randomly selected 40 questions... fresh quiz experience"
+        apiUrl += "?category=traffic_signs&random=true&limit=40";
+      } else if (quizType === "rules_of_road") {
+        // Requirement: "Randomly selected 40 questions... fresh quiz experience"
+        apiUrl += "?category=rules_of_road&random=true&limit=40";
+      }
+
+      const response = await fetch(apiUrl);
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        if (data.quizzes.length === 0) {
+          Alert.alert(
+            "No Questions",
+            "No questions available for this quiz type.",
+          );
+          router.back();
+          return;
+        }
+        setQuestions(data.quizzes);
+        setScreenState("intro");
+      } else {
+        throw new Error("Failed to load questions");
+      }
+    } catch (error) {
+      console.error("Error fetching questions:", error);
+      Alert.alert("Error", "Could not load quiz questions. Please try again.");
+      router.back();
+    }
+  };
+
+  // Reset quiz state when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      setScreenState("loading");
+      setCurrentQuestionIndex(0);
+      setSelectedOption(null);
+      setIsSubmitted(false);
+      setScore(0);
+      setQuestionsAttempted([]);
+      setStartTime(0);
+
+      if (userEmail) {
+        fetchQuestions();
+      }
+    }, [quizType, userEmail]),
+  );
 
   const getQuizTitle = () => {
     switch (quizType) {
@@ -151,11 +159,11 @@ useFocusEffect(
   const getQuizDescription = () => {
     switch (quizType) {
       case "traffic_signs":
-        return `${totalQuestions} questions about road signs`;
+        return `40 random questions about road signs`;
       case "rules_of_road":
-        return `${totalQuestions} questions about traffic laws`;
+        return `40 random questions about traffic laws`;
       default:
-        return `${totalQuestions} mixed questions from all categories`;
+        return `20 fixed mixed questions`;
     }
   };
 
@@ -179,8 +187,7 @@ useFocusEffect(
     if (selectedOption === null) return;
 
     const isCorrect = selectedOption === currentQuestion.correctAnswerIndex;
-    
-    // Record this attempt
+
     const attempt: QuestionAttempt = {
       questionId: currentQuestion.id,
       userAnswer: selectedOption,
@@ -202,7 +209,6 @@ useFocusEffect(
       setIsSubmitted(false);
       setSelectedOption(null);
     } else {
-      // Quiz completed - save results
       saveQuizAttempt();
     }
   };
@@ -211,9 +217,8 @@ useFocusEffect(
     setScreenState("saving");
 
     const endTime = Date.now();
-    const timeTaken = Math.round((endTime - startTime) / 1000); // in seconds
-    
-    // Use the current score and questionsAttempted - they already include all answers
+    const timeTaken = Math.round((endTime - startTime) / 1000);
+
     const finalScore = score;
     const percentage = Math.round((finalScore / totalQuestions) * 100);
     const passingScore = Math.ceil(totalQuestions * 0.8);
@@ -231,15 +236,6 @@ useFocusEffect(
     };
 
     try {
-      console.log("Saving quiz attempt for email:", userEmail);
-      console.log("Quiz data:", {
-        correctAnswers: finalScore,
-        totalQuestions,
-        percentage,
-        isPassed,
-        totalAttempts: questionsAttempted.length
-      });
-      
       const response = await fetch(`${API_URL}/api/quiz/save`, {
         method: "POST",
         headers: {
@@ -251,7 +247,6 @@ useFocusEffect(
       const data = await response.json();
 
       if (response.ok && data.success) {
-        console.log("Quiz attempt saved successfully:", data.attemptId);
         setScreenState("result");
       } else {
         throw new Error(data.message || "Failed to save quiz attempt");
@@ -266,7 +261,7 @@ useFocusEffect(
             text: "OK",
             onPress: () => setScreenState("result"),
           },
-        ]
+        ],
       );
     }
   };
@@ -275,7 +270,8 @@ useFocusEffect(
     router.back();
   };
 
-  // --- LOADING SCREEN ---
+  // --- RENDERING ---
+
   if (screenState === "loading" || !userEmail) {
     return (
       <SafeAreaView style={styles.container}>
@@ -287,7 +283,6 @@ useFocusEffect(
     );
   }
 
-  // --- SAVING SCREEN ---
   if (screenState === "saving") {
     return (
       <SafeAreaView style={styles.container}>
@@ -299,7 +294,7 @@ useFocusEffect(
     );
   }
 
-  // --- 1. INTRO SCREEN ---
+  // --- INTRO SCREEN ---
   if (screenState === "intro") {
     return (
       <SafeAreaView style={styles.container}>
@@ -314,9 +309,9 @@ useFocusEffect(
           <View style={styles.introIconCircle}>
             <Ionicons name="play" size={40} color="#4F46E5" />
           </View>
-          <Text style={styles.introTitle}>Ready?</Text>
+          <Text style={styles.introTitle}>{getQuizTitle()}</Text>
           <Text style={styles.introSubtitle}>{getQuizDescription()}</Text>
-          
+
           <TouchableOpacity style={styles.primaryBtn} onPress={handleStartQuiz}>
             <Text style={styles.primaryBtnText}>Start Quiz</Text>
           </TouchableOpacity>
@@ -325,7 +320,7 @@ useFocusEffect(
     );
   }
 
-  // --- 2. RESULT SCREEN ---
+  // --- RESULT SCREEN ---
   if (screenState === "result") {
     const passingScore = Math.ceil(totalQuestions * 0.8);
     const isPassed = score >= passingScore;
@@ -354,7 +349,8 @@ useFocusEffect(
             {isPassed ? "Good Job!" : "Keep Practicing"}
           </Text>
           <Text style={styles.resultSubtitle}>
-            You scored {percentage}%. {isPassed ? "You passed!" : "You need 80% to pass."}
+            You scored {percentage}%.{" "}
+            {isPassed ? "You passed!" : "You need 80% to pass."}
           </Text>
 
           <View style={styles.statsContainer}>
@@ -379,7 +375,7 @@ useFocusEffect(
     );
   }
 
-  // --- 3. QUIZ SCREEN ---
+  // --- QUIZ SCREEN ---
   if (!currentQuestion) return null;
 
   return (
